@@ -1,0 +1,337 @@
+---
+title: "Projet_Classification Automatique"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_document:
+    theme: cerulean
+    number_sections: no
+    toc: yes
+    toc_depth: 5
+    toc_float: true
+---
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 12px;
+  }
+td {  /* Table  */
+  font-size: 8px;
+}
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+}
+h1 { /* Header 1 */
+  font-size: 28px;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+    font-size: 18px;
+  color: DarkBlue;
+}
+h3 { /* Header 3 */
+  font-size: 15px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+}
+code.r{ /* Code block */
+    font-size: 12px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 14px;
+}
+</style>
+
+# Contexte
+Projet_Uni: Classification CAH, ACP, K-means
+
+# Bibliothèques
+
+```{r}
+if(!require(tm)) install.packages("tm", repos = "http://cran.us.r-project.org")
+require(tm)
+
+if(!require(wordcloud2)) install.packages("wordcloud2", repos = "http://cran.us.r-project.org")
+require(wordcloud2)
+
+if(!require(caTools)) install.packages("caTools", repos = "http://cran.us.r-project.org")
+require(caTools)
+
+if(!require(randomForest)) install.packages("randomForest", repos = "http://cran.us.r-project.org")
+require(randomForest)
+
+if(!require(SnowballC)) install.packages("SnowballC", repos = "http://cran.us.r-project.org")
+require(SnowballC)
+
+if(!require(rpart)) install.packages("rpart", repos = "http://cran.us.r-project.org")
+require(rpart)
+
+if(!require(rattle)) install.packages("rattle", repos = "http://cran.us.r-project.org")
+require(rattle)
+
+if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.r-project.org")
+require(rpart.plot)
+
+# Visualisation
+if(!require(visNetwork)) install.packages("visNetwork", repos = "http://cran.us.r-project.org")
+require(visNetwork)
+
+if(!require(sparkline)) install.packages("sparkline", repos = "http://cran.us.r-project.org")
+require(sparkline)
+
+if(!require(knitr)) install.packages("knitr", repos = "http://cran.us.r-project.org")
+require(knitr)
+
+if(!require(pROC)) install.packages("pROC", repos = "http://cran.us.r-project.org")
+require(pROC)
+
+if(!require(ROCR)) install.packages("ROCR", repos = "http://cran.us.r-project.org")
+require(ROCR)
+
+if(!require(cvAUC)) install.packages("cvAUC", repos = "http://cran.us.r-project.org")
+require(cvAUC)
+
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+require(caret)
+
+if(!require(lattice)) install.packages("lattice", repos = "http://cran.us.r-project.org")
+require(lattice)
+
+if(!require(RTextTools)) install.packages("RTextTools", repos = "http://cran.us.r-project.org")
+require(RTextTools)
+
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
+require(dplyr)
+
+if(!require(textstem)) install.packages("textstem", repos = "http://cran.us.r-project.org")
+require(textstem)
+
+if(!require(compare)) install.packages("compare", repos = "http://cran.us.r-project.org")
+require(compare)
+
+if(!require(udpipe)) install.packages("udpipe", repos = "http://cran.us.r-project.org")
+require(udpipe)
+
+if(!require(klaR)) install.packages("klaR", repos = "http://cran.us.r-project.org")
+require(klaR)
+```
+
+# Import des données
+```{r}
+data("iris")
+head(iris)
+
+```
+
+# Préparation de la base
+
+## Gestion des manquants 
+Supprimer les lignes avec des valeurs manquantes
+```{r}
+iris_clean <- na.omit(iris)
+install.packages("tidyverse")       # for data work & visualization
+install.packages("cluster")         # for cluster modeling install.packages("reshape2")        # for melting data
+# note : not required if already installed
+library(tidyverse)
+library(cluster)
+library(reshape2)
+
+# A faire:
+# CAH => faire varier norme, saut, coupure
+# K-means => faire varier norme, criteres d'arret, initialisation des centre
+
+```
+
+```{r}
+# Methode 01
+set.seed(123) # for reproduction
+wcss <- vector()
+for (i in 1:10) wcss[i] <- sum(kmeans(iris_clean[, -5], i)$withinss)
+plot(1:10,
+ wcss,
+ type = "b",
+ main = paste("The Elbow Method"),
+ xlab = "Number of Clusters",
+ ylab = "WCSS")
+# Usage of K-means:
+# Splits the data in three groups:
+# The first one with 21 obs, the second one with 33 obs, and the last one with 96 obs
+km <- kmeans(x = iris_clean[, -5] , centers = 3) # splits in 3 groups the data without the Species
+yclus <- km$cluster
+table(yclus)
+# Visualisation of the clusters:
+clusplot(iris_clean[, -5], yclus, lines = 0, shade = TRUE, color = TRUE, span = TRUE, main = paste("Clusters of Iris Flowers"))
+
+```
+
+# K-means:
+# Faire varier norme (impossible sur R), criteres d'arret, initialisation des centres
+
+```{r}
+# Methode 01
+km_clust <- kmeans(iris_clean[, -5] , centers = 3,iter.max = 30,nstart = 1) # distance par default = euclidienne
+km_clust$centers
+ciris <- iris_clean
+ciris$cluster <- km_clust$cluster
+table(ciris[,5])
+table(ciris[,6])
+# Matrice de confusion = Table de contingence :
+table(ciris[,5:6])
+# Interpretation de la matrice de confusion:
+# Etiquettes changent a chaque fois, ici:
+# Classe 1 = virginica 
+# Classe 2 = versicolor
+# Classe 3 = setosa 
+# Executer/ Tester plusieurs fois pour regarder convergence
+# Si changements extremes, iterations loin du point de convergence, sinon c'est bon
+
+# Visualisation:
+clusplot(iris_clean[, -5], ciris$cluster, lines = 0, shade = TRUE, color = TRUE, span = TRUE, main = paste("Clusters of Iris Flowers"))
+
+```
+
+# CAH :
+# Faire varier norme, saut, coupure
+
+```{r}
+
+```
+
+# Contexte
+# Projet_Uni: Classification LDA, QDA ...
+
+# Preparation des echantillons
+```{r}
+# Creation des echantillons Test et Train par classe pour respecter les proportions => autant de virginica, setosa,... dans nos echantillons
+
+srows=c(sample(1:50,40), sample(51:100,40),sample(101:150,40))
+irisTrain = iris[srows,] 
+irisTest = iris[-srows,]
+```
+
+# Utilisation LDA:
+# Utiliser pour lineaire
+```{r}
+library(MASS)
+fit = lda(x=irisTrain[,1:4],grouping=irisTrain[,5],prior=c(1,1,1)/3,CV=FALSE)
+fit
+#Interpretation si CV = TRUE:
+# $class => Decision echantillon par echantillon
+# $posterior => Proba pour chaque echantillon
+
+#Prediction sur tout
+predict(fit,irisTrain[,1:4])
+#Prediction: classification predite
+predict(fit,irisTrain[,1:4])$class
+#Prediction: proba a posteriori
+predict(fit,irisTrain[,1:4])$posterior
+
+# Accuracy de la prediction sur le training set
+ctrain = table(irisTrain$Species,predict(fit,irisTrain[,1:4])$class)
+ctrain
+
+prop.table(ctrain,1) # % correct/column
+sum(diag(prop.table(ctrain))) # total % correct
+
+# Accuracy de la prediction sur le testing set
+ctest = table(irisTest$Species,predict(fit,irisTest[,1:4])$class)
+ctest
+
+prop.table(ctest,1) # % correct/column
+sum(diag(prop.table(ctest))) # total % correct
+
+# Ajout de la colonne predite dans la base iris
+iris$class = predict(fit,iris[,1:4])$class
+# Plot iris
+n=length(iris[,1])
+irisCol = rep('green',n)
+irisChar = rep(0,n)
+for (i in 1:n){
+  if (iris[i,6] != iris[i,5]){
+    irisCol[i] = 'red'
+    irisChar[i] = 20
+  }
+}
+win.graph()
+title=sprintf("IRIS ERRORS(%s) - %g points", "Sepal Width vs Length",n)
+plot(iris[,1], iris[,2], pch=irisChar, col=irisCol, main=title, xlab="Sepal.Length",ylab="Sepal.Width")
+#dev.copy(png,"Sepal_Width_vs_Length_Errors.png")
+#dev.off()
+
+#Apprentissage du modele LDA
+library(klaR)
+partimat(x=irisTrain[,1:4], grouping=irisTrain[,5], method = "lda", prec=100, main = "Partition Plot")
+# Frontieres interseque au modele, a eviter sur des donnees Rn
+
+```
+
+# Utilisation QDA:
+# Utiliser pour non-lineaire
+```{r}
+#library(MASS)
+fit = qda(x=irisTrain[,1:4],grouping=irisTrain[,5],prior=c(1,1,1)/3)
+fit
+
+# Accuracy de la prediction sur le training set
+ctrain = table(irisTrain$Species,predict(fit,irisTrain[,1:4])$class)
+prop.table(ctrain,1) # % correct/column
+sum(diag(prop.table(ctrain))) # total % correct
+
+# Accuracy de la prediction sur le testing set
+ctest = table(irisTest$Species,predict(fit,irisTest[,1:4])$class)
+prop.table(ctest,1) # % correct/column
+sum(diag(prop.table(ctest))) # total % correct
+
+#Apprentissage du modele LDA
+#library(klaR)
+partimat(x=irisTrain[,1:4], grouping=irisTrain[,5], method = "qda", prec=100, main = "Partition Plot")
+
+```
+# Utilisation Decision Tree:
+```{r}
+library(rpart)
+# Construction de l'arbre de decision
+iris_tree = rpart(Species ~., data = irisTrain, method="class")
+iris_tree # Affichage de l'arbre textuellement
+#Interpretation:
+# Noeud 1 = racine => contient 120 elements, 80 Non setosa
+# Noeud 2 : Noeud 1 => Condition Petal.length < 2.6 , contient 40 elements dont 0 setosa, et c'est une feuille
+
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+win.graph()
+rpart.plot(iris_tree,main="Iris Classification")
+fancyRpartPlot(iris_tree,main="Iris Classification")
+
+# Evaluation de la prediction sur un arbre de decision:
+irisTest$Predict <- predict(iris_tree,irisTest, type = "class")
+table(irisTest$Species)
+table(irisTest$Predict)
+tres2 <- table(irisTest[,5:6])
+prop.table(tres2,1)
+
+# Construit l’arbre de décision
+iris_tree = rpart(Species ~ .,data = irisTrain, method="class",control=rpart.control(minsplit=2, cp=0))
+
+# Affiche le graphe
+fancyRpartPlot(iris_tree,main="Iris Classification")
+
+```
+# TITANIC TEST:
+```{r}
+```
+
+
+# SVM TEST:
+```{r}
+# Frontiere circulaire ! (diapo 151)
+# le produit des deux points est: Yi * (<w,xi> + b)
+# Si produit de deux points = 0 => sur la marge h(x)=0
+# Si produit de deux points = 1 => le point est sur la bonne marge (vert h(x) = 1, rouge h(x) = -1)
+# Si produit de deux points = -1 => le point est sur la mauvaise marge (vert h(x) = -1, rouge h(x) = 1)
+
+```
+
+
+
